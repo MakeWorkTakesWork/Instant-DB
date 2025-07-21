@@ -1,0 +1,25 @@
+# Core dependencies
+sentence-transformers>=2.2.2
+numpy>=1.24.0
+pandas>=2.0.0
+
+# Graph memory dependencies
+networkx>=3.0
+spacy>=3.4.0
+
+# Vector database options
+chromadb>=0.4.15
+faiss-cpu>=1.7.4
+
+# Optional: OpenAI embeddings
+openai>=1.0.0
+
+# Web server for API
+flask>=2.3.0
+flask-cors>=4.0.0
+
+# Utilities
+tqdm>=4.65.0
+requests>=2.31.0
+python-dotenv>=1.0.0
+click>=8.0.0
