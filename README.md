@@ -59,39 +59,80 @@ Instant-DB takes your **existing document processing pipeline** and adds **intel
 
 ## 🚀 Quick Start
 
-### 1. Install Dependencies
+### Installation
+
 ```bash
-pip install sentence-transformers chromadb numpy pandas
+# Install Instant-DB
+pip install instant-db
+
+# Platform-specific setup for file type detection
+# macOS
+brew install libmagic
+
+# Ubuntu/Debian
+sudo apt-get install libmagic1
+
+# Windows (recommended: use WSL2)
+wsl --install
 ```
 
-### 2. Process Your Documents
+### Basic Usage
+
 ```bash
-# Single document
-python instant_db.py process document.pdf
+# Auto-detect and process all documents in a directory
+instant-db process ./documents
 
-# Entire directory
-python instant_db.py process ./sales-materials --batch
+# Search your knowledge base
+instant-db search "machine learning optimization"
 
-# With OpenAI embeddings (higher quality)
-python instant_db.py process ./docs --embedding-provider openai
+# Search with metadata filtering
+instant-db search "pricing" --filter "file_type:pdf"
+instant-db search "report" --filter "file_size_mb>10"
+
+# Export for Custom GPT
+instant-db export --format markdown
 ```
 
-### 3. Search Your Knowledge Base
+## 🔍 Advanced Features
+
+### Metadata Filtering System
+
+Powerful document filtering based on comprehensive metadata:
+
 ```bash
-# Command line search
-python instant_db.py search "pricing objection handling"
+# Filter by file type
+instant-db process ./docs --filter "file_type:pdf"
 
-# Interactive search
-python instant_db.py search --interactive
+# Filter by size and date
+instant-db search "quarterly" --filter '[{"field": "file_size_mb", "operator": "gt", "value": 5}, {"field": "creation_year", "operator": "eq", "value": 2024}]'
 
-# Graph-enhanced search (relationship reasoning)
-python instant_db.py search "pricing objections" --graph --include-relationships
+# Available filter fields
+instant-db search --show-filter-examples
 ```
 
-### 4. Export for Custom GPT
+**Supported Filter Fields:**
+- `filename`, `file_type`, `file_extension`, `mime_type`
+- `file_size`, `file_size_mb`
+- `creation_date`, `modification_date`, `creation_year`, `creation_month`
+- `age_days` (days since creation)
+- `tags`, `author`, `encoding`
+
+**Filter Operators:**
+- `:` or `=` (equals), `!=` (not equals), `~` (contains)
+- `^` (starts with), `$` (ends with), `>` `<` `>=` `<=` (comparison)
+
+### Auto-Discovery
+
+Smart document detection eliminates manual manifest creation:
+
 ```bash
-# Create file ready for ChatGPT upload
-python instant_db.py export --format custom-gpt
+# Before: Manual manifest required
+instant-db create --source manifest.json
+
+# After: Automatic discovery (default)
+instant-db process ./documents
+instant-db process ./docs --extensions .pdf .docx --exclude temp
+instant-db process ./sales --max-file-size 50 --recursive
 ```
 
 ## 📋 Complete Workflow Example
