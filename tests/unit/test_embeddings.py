@@ -44,7 +44,7 @@ class TestEmbeddingProvider:
         with pytest.raises(ValueError, match="Unsupported provider"):
             EmbeddingProvider(provider="unsupported")
     
-    @patch('instant_db.core.embeddings.SentenceTransformer')
+    @patch('sentence_transformers.SentenceTransformer')
     def test_encode_with_cache(self, mock_st):
         """Test encoding with caching"""
         # Mock the SentenceTransformer
@@ -73,7 +73,7 @@ class TestEmbeddingProvider:
         assert stats['cache_misses'] == 2  # Both texts from first call
         assert stats['hit_rate'] == 0.5
     
-    @patch('instant_db.core.embeddings.SentenceTransformer')
+    @patch('sentence_transformers.SentenceTransformer')
     def test_encode_without_cache(self, mock_st):
         """Test encoding without cache"""
         mock_model = Mock()
@@ -92,7 +92,7 @@ class TestEmbeddingProvider:
         provider.encode(texts, use_cache=False)
         assert mock_model.encode.call_count == 2
     
-    @patch('instant_db.core.embeddings.SentenceTransformer')
+    @patch('sentence_transformers.SentenceTransformer')
     def test_get_dimension(self, mock_st):
         """Test getting embedding dimension"""
         mock_model = Mock()
@@ -106,7 +106,7 @@ class TestEmbeddingProvider:
     
     def test_clear_cache(self):
         """Test clearing cache"""
-        with patch('instant_db.core.embeddings.SentenceTransformer'):
+        with patch('sentence_transformers.SentenceTransformer'):
             provider = EmbeddingProvider(provider="sentence-transformers")
             
             # Add some items to cache
@@ -123,7 +123,7 @@ class TestEmbeddingProvider:
     
     def test_empty_text_list(self):
         """Test encoding empty text list"""
-        with patch('instant_db.core.embeddings.SentenceTransformer'):
+        with patch('sentence_transformers.SentenceTransformer'):
             provider = EmbeddingProvider(provider="sentence-transformers")
             
             result = provider.encode([])
@@ -134,7 +134,7 @@ class TestEmbeddingProvider:
 class TestSentenceTransformerProvider:
     """Test SentenceTransformer provider directly"""
     
-    @patch('instant_db.core.embeddings.SentenceTransformer')
+    @patch('sentence_transformers.SentenceTransformer')
     def test_initialization(self, mock_st):
         """Test provider initialization"""
         mock_model = Mock()
@@ -148,11 +148,11 @@ class TestSentenceTransformerProvider:
     
     def test_missing_sentence_transformers(self):
         """Test missing sentence-transformers library"""
-        with patch('instant_db.core.embeddings.SentenceTransformer', side_effect=ImportError):
+        with patch.dict('sys.modules', {'sentence_transformers': None}):
             with pytest.raises(ImportError, match="sentence-transformers not installed"):
                 SentenceTransformerProvider()
     
-    @patch('instant_db.core.embeddings.SentenceTransformer')
+    @patch('sentence_transformers.SentenceTransformer')
     def test_encode_empty_list(self, mock_st):
         """Test encoding empty list"""
         mock_model = Mock()
@@ -169,7 +169,7 @@ class TestSentenceTransformerProvider:
 class TestOpenAIProvider:
     """Test OpenAI provider directly"""
     
-    @patch('instant_db.core.embeddings.openai.OpenAI')
+    @patch('openai.OpenAI')
     @patch.dict('os.environ', {'OPENAI_API_KEY': 'test-key'})
     def test_initialization(self, mock_openai):
         """Test OpenAI provider initialization"""
@@ -190,12 +190,11 @@ class TestOpenAIProvider:
     
     def test_missing_openai_library(self):
         """Test missing openai library"""
-        with patch('instant_db.core.embeddings.openai', None):
-            with patch.dict('instant_db.core.embeddings.__dict__', {'openai': None}):
-                with pytest.raises(ImportError, match="openai not installed"):
-                    OpenAIProvider(api_key="test")
+        with patch.dict('sys.modules', {'openai': None}):
+            with pytest.raises(ImportError, match="openai not installed"):
+                OpenAIProvider(api_key="test")
     
-    @patch('instant_db.core.embeddings.openai.OpenAI')
+    @patch('openai.OpenAI')
     @patch.dict('os.environ', {'OPENAI_API_KEY': 'test-key'})
     def test_encode(self, mock_openai):
         """Test OpenAI encoding"""
@@ -223,7 +222,7 @@ class TestOpenAIProvider:
             model="text-embedding-3-small"
         )
     
-    @patch('instant_db.core.embeddings.openai.OpenAI')
+    @patch('openai.OpenAI')
     @patch.dict('os.environ', {'OPENAI_API_KEY': 'test-key'})
     def test_encode_api_error(self, mock_openai):
         """Test OpenAI API error handling"""
@@ -239,7 +238,7 @@ class TestOpenAIProvider:
     @patch.dict('os.environ', {'OPENAI_API_KEY': 'test-key'})
     def test_get_dimension(self):
         """Test getting dimension for different models"""
-        with patch('instant_db.core.embeddings.openai.OpenAI'):
+        with patch('openai.OpenAI'):
             provider = OpenAIProvider(model_name="text-embedding-3-small")
             assert provider.get_dimension() == 1536
             

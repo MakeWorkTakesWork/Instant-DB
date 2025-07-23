@@ -146,7 +146,14 @@ class DocumentProcessor:
                 documents.append(doc)
             
             # Add to database
-            db_result = db.add_documents(documents)
+            # Since InstantDB expects a single document with content, we need to
+            # reconstruct the full document and let InstantDB handle chunking
+            full_content = "\n\n".join([chunk.content for chunk in chunks])
+            db_result = db.add_document(
+                content=full_content,
+                document_id=document_id,
+                metadata=doc_metadata
+            )
             
             # Get chunking statistics
             chunk_stats = self.chunking_engine.get_chunking_stats(chunks)
