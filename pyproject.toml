@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "instant-db"
-version = "1.0.0"
+version = "1.1.0"
 description = "Transform documents into searchable RAG databases in minutes"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -48,20 +48,33 @@ classifiers = [
 requires-python = ">=3.8"
 dependencies = [
     "sentence-transformers>=2.2.2",
-    "numpy>=1.24.0", 
+    "numpy>=1.24.0",
     "pandas>=2.0.0",
+    
+    # File type detection
+    "python-magic>=0.4.27",
+    
+    # Graph memory dependencies
     "networkx>=3.0",
+    "spacy>=3.4.0",
+
+    # Vector database options
     "chromadb>=0.4.15",
     "faiss-cpu>=1.7.4",
+    # sqlite3 is built into Python
+
+    # Optional: OpenAI embeddings
     "openai>=1.0.0",
+
+    # Web server for API
     "flask>=2.3.0",
     "flask-cors>=4.0.0",
+
+    # Utilities
     "tqdm>=4.65.0",
     "requests>=2.31.0",
     "python-dotenv>=1.0.0",
     "click>=8.0.0",
-    "pyyaml>=6.0",
-    "pathlib",
 ]
 dynamic = []
 
