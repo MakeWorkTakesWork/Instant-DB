@@ -167,7 +167,7 @@ class ErrorRecoveryHandler:
                         raise e
                 
                 # Wait before retry for certain error types
-                if error_type in [ErrorType.NETWORK_ERROR, ErrorType.TIMEOUT_ERROR]:
+                if processing_error.error_type in [ErrorType.NETWORK_ERROR, ErrorType.TIMEOUT_ERROR]:
                     import time
                     time.sleep(min(2 ** attempt, 10))  # Exponential backoff, max 10s
                 
