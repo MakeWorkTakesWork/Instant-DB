@@ -35,7 +35,7 @@ config = Config()
 @click.group()
 @click.option('--verbose', '-v', is_flag=True, help='Enable verbose output')
 @click.option('--quiet', '-q', is_flag=True, help='Suppress non-error output')
-@click.option('--config', '-c', type=click.Path(), help='Path to config file')
+@click.option('--config', '-c', 'config_path', type=click.Path(), help='Path to config file')
 @click.option('--db-path', help='Database path')
 @click.option('--embedding-provider', type=click.Choice(['sentence-transformers', 'openai']), 
               help='Embedding provider')
@@ -686,9 +686,9 @@ def stats(ctx):
         sys.exit(1)
 
 
-@cli.command()
+@cli.command('config')
 @click.pass_context
-def config(ctx):
+def configure(ctx):
     """Create or update configuration interactively"""
     
     click.echo("🔧 Instant-DB Configuration Wizard")
