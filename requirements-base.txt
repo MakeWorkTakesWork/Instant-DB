@@ -1,0 +1,41 @@
+# Core dependencies (platform-independent)
+sentence-transformers>=2.2.2
+numpy>=1.24.0
+pandas>=2.0.0
+
+# Graph memory dependencies
+networkx>=3.0
+spacy>=3.4.0
+
+# Vector database options
+chromadb>=0.4.15
+faiss-cpu>=1.7.4
+# sqlite3 is built into Python
+
+# Optional: OpenAI embeddings
+openai>=1.0.0
+
+# Document processing (optional - for raw document support)
+# megaparse  # Add if integrating with MegaParse
+
+# Web server for API
+flask>=2.3.0
+flask-cors>=4.0.0
+
+# Utilities
+tqdm>=4.65.0
+requests>=2.31.0
+python-dotenv>=1.0.0
+pathlib-python
+click>=8.0.0
+
+# Development dependencies (optional)
+pytest>=7.4.0
+black>=23.0.0
+flake8>=6.0.0
+mypy>=1.5.0
+
+# Optional: Advanced vector databases
+# pinecone-client>=2.2.4
+# weaviate-client>=3.24.0
+# qdrant-client>=1.6.0

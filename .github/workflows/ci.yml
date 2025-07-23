@@ -54,13 +54,18 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-pip-
 
-    - name: Install dependencies
+    - name: Install dependencies (Linux/macOS)
+      if: runner.os != 'Windows'
       run: |
         python -m pip install --upgrade pip
-        # Install python-magic-bin on Windows instead of python-magic
-        if [ "$RUNNER_OS" == "Windows" ]; then
-          pip install python-magic-bin
-        fi
+        pip install -r requirements.txt
+        pip install -e ".[dev]"
+
+    - name: Install dependencies (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements-windows.txt
         pip install -e ".[dev]"
 
     - name: Lint with flake8

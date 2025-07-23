@@ -1,0 +1,5 @@
+# Include base requirements
+-r requirements-base.txt
+
+# Windows-specific: Use python-magic-bin which includes Windows binaries
+python-magic-bin==0.4.14
