@@ -18,6 +18,15 @@ Instant-DB takes your **existing document processing pipeline** and adds **intel
 🔧 Manual Knowledge Management       →     ⚡ Graph-Enhanced Semantic Search
 ```
 
+### **Supported File Types**
+- 📄 **Documents**: PDF, DOCX, DOC, ODT, RTF
+- 📊 **Presentations**: PPT, PPTX, ODP
+- 📝 **Text**: TXT, MD, RST, LOG
+- 📈 **Data**: CSV, TSV, JSON, XML
+- 🌐 **Web**: HTML, HTM, XHTML
+- 📧 **Email**: EML, MSG
+- 📚 **eBooks**: EPUB, MOBI
+
 ## 🎯 Perfect For
 
 - **🏢 SaaS Sales Teams**: Search across pitch decks, objection handling, product docs
@@ -79,6 +88,9 @@ wsl --install
 ### Basic Usage
 
 ```bash
+# Try with our demo dataset first!
+instant-db process ./demo_dataset
+
 # Auto-detect and process all documents in a directory
 instant-db process ./documents
 
@@ -91,6 +103,20 @@ instant-db search "report" --filter "file_size_mb>10"
 
 # Export for Custom GPT
 instant-db export --format markdown
+```
+
+### 🎯 Quick Demo
+
+Try Instant-DB with our included demo dataset:
+
+```bash
+# Process demo documents
+instant-db process ./demo_dataset
+
+# Try these searches
+instant-db search "pricing objections"
+instant-db search "who is Sarah Chen" --graph
+instant-db search "action items" --filter "file_name:meeting"
 ```
 
 ## 🔍 Advanced Features
@@ -351,6 +377,41 @@ instant-db search --interactive
 # Export for Custom GPT
 instant-db export --format markdown --split-by-type
 ```
+
+## 🔧 Troubleshooting
+
+### Common Issues & Solutions
+
+| Symptom | Solution | Command/Fix |
+|---------|----------|-------------|
+| `ModuleNotFoundError: sentence_transformers` | Install missing dependencies | `pip install -e ".[all]"` |
+| `FileNotFoundError: [Errno 2] No such file or directory: 'magic'` | Install libmagic for your OS | macOS: `brew install libmagic`<br>Ubuntu: `sudo apt-get install libmagic1` |
+| "No module named instant_db" | Ensure you're in the repo root | `cd /path/to/Instant-DB` |
+| `RuntimeError: CUDA out of memory` | Use CPU-only mode | `export CUDA_VISIBLE_DEVICES=""` |
+| Slow processing on large PDFs | Reduce batch size | `instant-db process --batch-size 10` |
+| `Permission denied` errors | Check file permissions | `chmod -R 755 ./documents` |
+| Empty search results | Rebuild database | `instant-db process --force-rebuild` |
+| Import errors with spaCy | Download language model | `python -m spacy download en_core_web_sm` |
+
+### Platform-Specific Notes
+
+**Windows Users:**
+- Use WSL2 for best compatibility
+- Or install `python-magic-bin` instead: `pip install python-magic-bin`
+
+**macOS Users:**
+- May need Xcode CLI tools: `xcode-select --install`
+- For M1/M2 Macs with FAISS issues: `conda install -c conda-forge faiss-cpu`
+
+**Linux Users:**
+- Ensure `build-essential` is installed: `sudo apt-get install build-essential`
+- For headless servers, use: `export MPLBACKEND=Agg`
+
+### Getting Help
+
+- 🐛 **Report Issues**: [GitHub Issues](https://github.com/MakeWorkTakesWork/Instant-DB/issues)
+- 💬 **Discussions**: [GitHub Discussions](https://github.com/MakeWorkTakesWork/Instant-DB/discussions)
+- 📖 **Full Documentation**: See [docs/](./docs/) directory
 
 ## 📄 License
 

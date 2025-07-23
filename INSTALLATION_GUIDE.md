@@ -4,9 +4,25 @@ Complete installation instructions for all platforms with troubleshooting tips.
 
 ## 📋 Prerequisites
 
-- **Python 3.8+** (Python 3.10+ recommended)
+### Python Requirements
+- **Python 3.8 - 3.12** (Python 3.10+ recommended for best performance)
 - **pip** (included with Python)
 - **libmagic** (platform-specific installation required)
+
+### System Requirements
+- **Memory**: Minimum 4GB RAM (8GB+ recommended for large datasets)
+- **Storage**: 2x the size of your document collection
+- **OS**: Windows 10+, macOS 10.15+, Ubuntu 20.04+, or compatible Linux
+
+### Python Version Check
+```bash
+# Check your Python version
+python --version
+# or
+python3 --version
+
+# Should output: Python 3.8.x or higher
+```
 
 ## 🖥️ Platform-Specific Installation
 
@@ -30,6 +46,17 @@ sudo port install libmagic
 pip install instant-db
 ```
 
+#### Additional macOS Requirements
+- **Xcode Command Line Tools**: May be required for some dependencies
+  ```bash
+  xcode-select --install
+  ```
+- **For FAISS on Apple Silicon (M1/M2/M3)**:
+  ```bash
+  # Use conda for best compatibility
+  conda install -c conda-forge faiss-cpu
+  ```
+
 #### Troubleshooting macOS
 If you get `ImportError: failed to find libmagic`:
 
@@ -41,8 +68,17 @@ LDFLAGS="-L$(brew --prefix)/lib" pip install python-magic
 # Option 2: Set environment variable
 export DYLD_LIBRARY_PATH="$(brew --prefix)/lib:$DYLD_LIBRARY_PATH"
 
-# Option 3: For M1/M2 Macs
+# Option 3: For M1/M2/M3 Macs
 arch -arm64 brew install libmagic
+```
+
+**libomp issues (for sentence-transformers)**:
+```bash
+# Install OpenMP support
+brew install libomp
+
+# If you get "Library not loaded: /usr/local/opt/libomp/lib/libomp.dylib"
+brew reinstall libomp
 ```
 
 ### 🐧 Linux (Ubuntu/Debian)
@@ -52,14 +88,21 @@ arch -arm64 brew install libmagic
 # Update package list
 sudo apt-get update
 
-# Install libmagic
-sudo apt-get install libmagic1 libmagic-dev
+# Install essential build tools and dependencies
+sudo apt-get install build-essential libmagic1 libmagic-dev python3-dev
 
-# Install Python development headers (if needed)
-sudo apt-get install python3-dev
+# For complete installation (recommended)
+sudo apt-get install python3-pip python3-venv git
 
 # Install Instant-DB
 pip install instant-db
+```
+
+**Note for Ubuntu 20.04 users**: You may need to install Python 3.8+ from deadsnakes PPA:
+```bash
+sudo add-apt-repository ppa:deadsnakes/ppa
+sudo apt-get update
+sudo apt-get install python3.10 python3.10-venv python3.10-dev
 ```
 
 #### CentOS/RHEL/Fedora
