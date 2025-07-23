@@ -413,6 +413,10 @@ instant-db export --format markdown --split-by-type
 - 💬 **Discussions**: [GitHub Discussions](https://github.com/MakeWorkTakesWork/Instant-DB/discussions)
 - 📖 **Full Documentation**: See [docs/](./docs/) directory
 
+## 🔒 Security & Privacy
+
+Instant-DB processes all documents locally on your machine. Your data never leaves your control. See [SECURITY.md](SECURITY.md) for detailed privacy guarantees and security practices.
+
 ## 📄 License
 
 MIT License - see LICENSE file for details.

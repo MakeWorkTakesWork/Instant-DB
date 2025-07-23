@@ -93,12 +93,16 @@ class ChromaVectorStore(BaseVectorStore):
         search_results = []
         if results["ids"] and results["ids"][0]:
             for i in range(len(results["ids"][0])):
+                metadata = results["metadatas"][0][i] or {}
                 result = {
                     "id": results["ids"][0][i],
                     "content": results["documents"][0][i],
                     "similarity": 1 - results["distances"][0][i],  # Convert distance to similarity
-                    "metadata": results["metadatas"][0][i] or {}
+                    "metadata": metadata
                 }
+                # Also add key metadata fields to top level for convenience
+                if "document_id" in metadata:
+                    result["document_id"] = metadata["document_id"]
                 search_results.append(result)
         
         return search_results

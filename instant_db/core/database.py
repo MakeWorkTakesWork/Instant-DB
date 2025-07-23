@@ -135,14 +135,42 @@ class InstantDB:
         
         try:
             # Create chunks
-            chunks = self.chunking_engine.create_chunks(content, metadata)
+            chunks = self.chunking_engine.chunk_text(content, document_id, metadata)
             
             # Generate embeddings
-            chunk_texts = [chunk['content'] for chunk in chunks]
-            embeddings = self.embedding_provider.get_embeddings(chunk_texts)
+            chunk_texts = [chunk.content for chunk in chunks]
+            embeddings = self.embedding_provider.encode(chunk_texts)
             
-            # Store in vector database
-            self.search_engine.store_document(document_id, chunks, embeddings)
+            # Convert chunks to dict format for search engine
+            chunk_dicts = []
+            for i, chunk in enumerate(chunks):
+                # Flatten all metadata into the chunk dict
+                chunk_dict = {
+                    "id": chunk.id,
+                    "content": chunk.content,
+                    "document_id": document_id,
+                    "chunk_index": chunk.chunk_index,
+                    "chunk_type": chunk.chunk_type,
+                    "word_count": chunk.word_count,
+                    "char_count": chunk.char_count
+                }
+                
+                # Add section/subsection only if not None
+                if chunk.section is not None:
+                    chunk_dict["section"] = chunk.section
+                if chunk.subsection is not None:
+                    chunk_dict["subsection"] = chunk.subsection
+                
+                # Add any additional metadata from the chunk
+                for key, value in chunk.metadata.items():
+                    # Only add simple types that vector stores can handle, excluding None
+                    if value is not None and isinstance(value, (str, int, float, bool)):
+                        chunk_dict[key] = value
+                
+                chunk_dicts.append(chunk_dict)
+            
+            # Store in vector database - the search engine expects embeddings to be passed separately
+            self.search_engine.vector_store.add_documents(chunk_dicts, embeddings)
             
             # Process for graph memory
             graph_result = self.graph_memory.process_document_for_graph(
@@ -199,11 +227,17 @@ class InstantDB:
             List of search results with content and metadata
         """
         try:
+            # Build filters if document_type or document_id specified
+            filters = {}
+            if document_type:
+                filters["document_type"] = document_type
+            if document_id:
+                filters["document_id"] = document_id
+            
             results = self.search_engine.search(
                 query=query,
                 top_k=top_k,
-                document_type=document_type,
-                document_id=document_id
+                filters=filters if filters else None
             )
             
             # Log search operation
