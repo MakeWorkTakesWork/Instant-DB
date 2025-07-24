@@ -1,0 +1,144 @@
+{
+  "summary": {
+    "total_tests": 9,
+    "passed": 5,
+    "failed": 4,
+    "skipped": 0,
+    "success_rate": 55.55555555555556,
+    "total_duration": 14.723124504089355,
+    "categories": {
+      "core": {
+        "passed": 1,
+        "failed": 2,
+        "skipped": 0
+      },
+      "performance": {
+        "passed": 1,
+        "failed": 1,
+        "skipped": 0
+      },
+      "production": {
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      },
+      "integration": {
+        "passed": 0,
+        "failed": 1,
+        "skipped": 0
+      }
+    },
+    "failed_tests": [
+      "test_basic_database_operations",
+      "test_optimized_implementation",
+      "test_memory_optimizations",
+      "test_end_to_end_workflow"
+    ]
+  },
+  "detailed_results": [
+    {
+      "name": "test_basic_database_operations",
+      "category": "core",
+      "status": "failed",
+      "duration": 6.217409133911133,
+      "message": "{'success': False, 'error': \"'score'\"}",
+      "details": {}
+    },
+    {
+      "name": "test_optimized_implementation",
+      "category": "core",
+      "status": "failed",
+      "duration": 1.2014756202697754,
+      "message": "{'success': False, 'error': ''}",
+      "details": {}
+    },
+    {
+      "name": "test_database_optimizations",
+      "category": "core",
+      "status": "passed",
+      "duration": 0.006363630294799805,
+      "message": "Test passed successfully",
+      "details": {
+        "success": true,
+        "query_time": 0.000423431396484375,
+        "cached_time": 1.6450881958007812e-05,
+        "cache_hit_rate": 50.0,
+        "speedup": 25.73913043478261
+      }
+    },
+    {
+      "name": "test_performance_improvements",
+      "category": "performance",
+      "status": "passed",
+      "duration": 2.79329252243042,
+      "message": "Test passed successfully",
+      "details": {
+        "success": true,
+        "processing_time": 0.815507173538208,
+        "memory_usage": 3.50390625,
+        "overall_score": 77.536923491844,
+        "targets_met": true,
+        "targets": {
+          "max_processing_time": 2.0,
+          "max_memory_usage": 100.0,
+          "min_overall_score": 30.0
+        }
+      }
+    },
+    {
+      "name": "test_memory_optimizations",
+      "category": "performance",
+      "status": "failed",
+      "duration": 0.000152587890625,
+      "message": "{'success': False, 'error': \"MemoryConfig.__init__() got an unexpected keyword argument 'enable_compression'\"}",
+      "details": {}
+    },
+    {
+      "name": "test_health_monitoring",
+      "category": "production",
+      "status": "passed",
+      "duration": 1.352503776550293,
+      "message": "Test passed successfully",
+      "details": {
+        "success": true,
+        "overall_status": "unhealthy",
+        "total_checks": 3,
+        "healthy_checks": 2
+      }
+    },
+    {
+      "name": "test_error_recovery",
+      "category": "production",
+      "status": "passed",
+      "duration": 0.8544471263885498,
+      "message": "Test passed successfully",
+      "details": {
+        "success": true,
+        "retry_attempts": 3,
+        "circuit_breaker_state": "closed",
+        "recovery_services": 3,
+        "successful_recoveries": 3
+      }
+    },
+    {
+      "name": "test_production_logging",
+      "category": "production",
+      "status": "passed",
+      "duration": 0.10994458198547363,
+      "message": "Test passed successfully",
+      "details": {
+        "success": true,
+        "log_files_created": 3,
+        "log_directory": "/tmp/logging_test_52n1x49x/logs"
+      }
+    },
+    {
+      "name": "test_end_to_end_workflow",
+      "category": "integration",
+      "status": "failed",
+      "duration": 2.187535524368286,
+      "message": "{'success': False, 'error': \"'score'\"}",
+      "details": {}
+    }
+  ]
+}

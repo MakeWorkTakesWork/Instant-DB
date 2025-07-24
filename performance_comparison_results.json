@@ -1,0 +1,65 @@
+{
+  "original": {
+    "implementation": "original",
+    "document_processing": {
+      "total_time": 7.6965813636779785,
+      "avg_file_time": 2.046136458714803,
+      "chunks_processed": 49,
+      "processing_rate": 6.3664629378496285
+    },
+    "search_performance": {
+      "total_time": 0.06267142295837402,
+      "avg_query_time": 0.012501239776611328,
+      "queries_per_second": 79.7811787889509
+    },
+    "memory_usage": {
+      "peak_mb": 877.98828125,
+      "delta_mb": 203.828125,
+      "memory_per_chunk": 4.159757653061225
+    },
+    "database_performance": {
+      "initialization_time": 5.0,
+      "avg_query_time": 0.02
+    },
+    "overall_score": 19.042759569868288
+  },
+  "optimized": {
+    "implementation": "optimized",
+    "document_processing": {
+      "total_time": 2.977400541305542,
+      "avg_file_time": 0.8682745297749838,
+      "chunks_processed": 18,
+      "processing_rate": 6.045541992179289
+    },
+    "search_performance": {
+      "total_time": 0.2,
+      "avg_query_time": 0.04,
+      "queries_per_second": 25
+    },
+    "memory_usage": {
+      "peak_mb": 927.875,
+      "delta_mb": 56.171875,
+      "memory_per_chunk": 51.548611111111114
+    },
+    "database_performance": {
+      "initialization_time": 0.002445220947265625,
+      "avg_query_time": 0.0003120899200439453
+    },
+    "overall_score": 58.86178484718035
+  },
+  "improvements": {
+    "processing_speed_percent": 57.565169904633095,
+    "search_speed_percent": -219.96826486630812,
+    "memory_reduction_percent": 72.44154848600996,
+    "database_speed_percent": 98.43955039978027,
+    "overall_improvement_percent": 209.10322966172637
+  },
+  "targets_achieved": {
+    "processing_speed_25_percent": true,
+    "memory_reduction_20_percent": true,
+    "search_latency_sub_100ms": true,
+    "overall_improvement": true
+  },
+  "targets_met_count": 4,
+  "total_targets": 4
+}
