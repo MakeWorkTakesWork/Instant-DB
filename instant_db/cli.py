@@ -703,6 +703,193 @@ def configure(ctx):
 
 
 @cli.command()
+@click.argument('directory', type=click.Path(exists=True, file_okay=False, dir_okay=True))
+@click.option('--dry-run', is_flag=True, help='Show what would be updated without making changes')
+@click.option('--force', is_flag=True, help='Force update even if files appear unchanged')
+@click.option('--delete-missing', is_flag=True, help='Delete documents from DB if source files are missing')
+@click.pass_context
+def update(ctx, directory, dry_run, force, delete_missing):
+    """🔄 Update database with changed documents
+    
+    Scans the specified directory for changes and updates the database accordingly.
+    
+    Examples:
+        # Check what needs updating
+        instant-db update ./documents --dry-run
+        
+        # Update changed files only
+        instant-db update ./documents
+        
+        # Update and remove deleted files
+        instant-db update ./documents --delete-missing
+        
+        # Force re-process all files
+        instant-db update ./documents --force
+    """
+    config = ctx.obj['config']
+    logger = ctx.obj['logger']
+    
+    directory = Path(directory)
+    
+    # Initialize database
+    db = InstantDB(
+        db_path=config.database.path,
+        embedding_provider=config.database.embedding_provider,
+        embedding_model=config.database.embedding_model,
+        vector_db=config.database.vector_db
+    )
+    
+    # Initialize processor for new/modified files
+    processor = DocumentProcessor(
+        embedding_provider=config.database.embedding_provider,
+        embedding_model=config.database.embedding_model,
+        vector_db=config.database.vector_db,
+        chunk_size=config.database.chunk_size,
+        chunk_overlap=config.database.chunk_overlap
+    )
+    
+    click.echo(f"🔍 Checking for updates in: {directory}")
+    
+    # Check for updates
+    with click.progressbar(length=1, label='🔍 Scanning for changes') as bar:
+        updates = db.check_for_updates(directory)
+        bar.update(1)
+    
+    # Show summary
+    total_changes = (len(updates['new_files']) + 
+                    len(updates['modified_files']) + 
+                    len(updates['deleted_files']))
+    
+    if total_changes == 0 and not force:
+        click.echo("✅ Database is up to date. No changes detected.")
+        return
+    
+    click.echo(f"\n📊 Update Summary:")
+    if updates['new_files']:
+        click.echo(f"   🆕 New files: {len(updates['new_files'])}")
+        for file_info in updates['new_files'][:5]:
+            click.echo(f"      • {Path(file_info['file_path']).name} ({file_info['file_size_mb']:.1f} MB)")
+        if len(updates['new_files']) > 5:
+            click.echo(f"      ... and {len(updates['new_files']) - 5} more")
+    
+    if updates['modified_files']:
+        click.echo(f"   📝 Modified files: {len(updates['modified_files'])}")
+        for file_info in updates['modified_files'][:5]:
+            click.echo(f"      • {Path(file_info['file_path']).name} ({file_info['old_hash']} → {file_info['new_hash']})")
+        if len(updates['modified_files']) > 5:
+            click.echo(f"      ... and {len(updates['modified_files']) - 5} more")
+    
+    if updates['deleted_files']:
+        click.echo(f"   🗑️  Deleted files: {len(updates['deleted_files'])}")
+        for file_info in updates['deleted_files'][:5]:
+            click.echo(f"      • {Path(file_info['file_path']).name} (ID: {file_info['document_id']})")
+        if len(updates['deleted_files']) > 5:
+            click.echo(f"      ... and {len(updates['deleted_files']) - 5} more")
+    
+    if force:
+        click.echo(f"\n   ⚡ Force mode: All documents will be re-processed")
+    
+    if dry_run:
+        click.echo(f"\n🔍 Dry run mode - no changes will be made")
+        return
+    
+    # Confirm before proceeding
+    if not click.confirm(f"\n🚀 Proceed with updating {total_changes} documents?"):
+        click.echo("⏹️  Update cancelled.")
+        return
+    
+    # Process updates
+    click.echo(f"\n🚀 Processing updates...")
+    
+    results = {
+        'new_processed': 0,
+        'new_errors': 0,
+        'modified_processed': 0,
+        'modified_errors': 0,
+        'deleted_processed': 0,
+        'deleted_errors': 0
+    }
+    
+    # Process new files
+    if updates['new_files']:
+        with tqdm(updates['new_files'], desc="🆕 Adding new files", unit="file") as pbar:
+            for file_info in pbar:
+                file_path = Path(file_info['file_path'])
+                pbar.set_postfix_str(f"Processing: {file_path.name[:30]}")
+                
+                try:
+                    result = processor.process_document(
+                        file_path=file_path,
+                        output_dir=config.database.path
+                    )
+                    if result['status'] == 'success':
+                        results['new_processed'] += 1
+                    else:
+                        results['new_errors'] += 1
+                except Exception as e:
+                    logger.error(f"Error processing {file_path}: {e}")
+                    results['new_errors'] += 1
+    
+    # Process modified files
+    if updates['modified_files']:
+        with tqdm(updates['modified_files'], desc="📝 Updating modified files", unit="file") as pbar:
+            for file_info in pbar:
+                file_path = Path(file_info['file_path'])
+                document_id = file_info['document_id']
+                pbar.set_postfix_str(f"Updating: {file_path.name[:30]}")
+                
+                try:
+                    # Read file content
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                    
+                    # Create metadata
+                    metadata = {
+                        'title': file_path.stem,
+                        'source_file': str(file_path),
+                        'file_type': file_path.suffix[1:] if file_path.suffix else 'txt'
+                    }
+                    
+                    # Update document
+                    result = db.update_document(document_id, content, metadata)
+                    if result['status'] in ['updated', 'skipped']:
+                        results['modified_processed'] += 1
+                    else:
+                        results['modified_errors'] += 1
+                except Exception as e:
+                    logger.error(f"Error updating {file_path}: {e}")
+                    results['modified_errors'] += 1
+    
+    # Process deleted files
+    if delete_missing and updates['deleted_files']:
+        with tqdm(updates['deleted_files'], desc="🗑️  Removing deleted files", unit="file") as pbar:
+            for file_info in pbar:
+                document_id = file_info['document_id']
+                pbar.set_postfix_str(f"Removing: {document_id[:30]}")
+                
+                try:
+                    if db.delete_document(document_id):
+                        results['deleted_processed'] += 1
+                    else:
+                        results['deleted_errors'] += 1
+                except Exception as e:
+                    logger.error(f"Error deleting {document_id}: {e}")
+                    results['deleted_errors'] += 1
+    
+    # Show results
+    click.echo(f"\n✅ Update completed!")
+    click.echo(f"   🆕 New files: {results['new_processed']} added, {results['new_errors']} errors")
+    click.echo(f"   📝 Modified files: {results['modified_processed']} updated, {results['modified_errors']} errors")
+    if delete_missing:
+        click.echo(f"   🗑️  Deleted files: {results['deleted_processed']} removed, {results['deleted_errors']} errors")
+    
+    # Quick tip
+    click.echo(f"\n💡 Next steps:")
+    click.echo(f"   🔍 Search updated content: instant-db search 'your query'")
+    click.echo(f"   📊 Check stats: instant-db stats")
+
+
+@cli.command()
 @click.pass_context
 def init(ctx):
     """Initialize a new Instant-DB project"""

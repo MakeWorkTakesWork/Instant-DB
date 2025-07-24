@@ -433,6 +433,146 @@ class InstantDB:
             self._log_operation(document_id, "delete_document", "error", str(e))
             return False
     
+    def update_document(self, document_id: str, content: str, metadata: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Update an existing document by re-processing it
+        
+        Args:
+            document_id: ID of the document to update
+            content: New document content
+            metadata: Updated metadata
+            
+        Returns:
+            Dict with update results
+        """
+        # Calculate new file hash
+        new_file_hash = hashlib.md5(content.encode()).hexdigest()
+        
+        # Check if document exists and get old hash
+        conn = sqlite3.connect(self.metadata_db_path)
+        cursor = conn.execute(
+            'SELECT file_hash FROM documents WHERE document_id = ?',
+            (document_id,)
+        )
+        result = cursor.fetchone()
+        conn.close()
+        
+        if not result:
+            return {"status": "error", "document_id": document_id, "error": "Document not found"}
+        
+        old_file_hash = result[0]
+        
+        # Check if content has changed
+        if old_file_hash == new_file_hash:
+            return {"status": "skipped", "document_id": document_id, "reason": "Content unchanged"}
+        
+        try:
+            # Delete old document
+            self.delete_document(document_id)
+            
+            # Add updated document
+            add_result = self.add_document(content, metadata, document_id)
+            
+            if add_result["status"] == "success":
+                self._log_operation(document_id, "update_document", "success", 
+                                  f"Updated with {add_result.get('chunks_processed', 0)} chunks")
+                return {
+                    "status": "updated",
+                    "document_id": document_id,
+                    "chunks_processed": add_result.get("chunks_processed", 0),
+                    "old_hash": old_file_hash[:8],
+                    "new_hash": new_file_hash[:8]
+                }
+            else:
+                return add_result
+                
+        except Exception as e:
+            self._log_operation(document_id, "update_document", "error", str(e))
+            return {
+                "status": "error",
+                "document_id": document_id,
+                "error": str(e)
+            }
+    
+    def check_for_updates(self, source_directory: Path) -> Dict[str, Any]:
+        """
+        Check for documents that need updating based on file changes
+        
+        Args:
+            source_directory: Directory to scan for updates
+            
+        Returns:
+            Dict with files that need updating
+        """
+        from ..core.discovery import DocumentDiscovery
+        
+        # Get all documents in database with source files
+        conn = sqlite3.connect(self.metadata_db_path)
+        cursor = conn.execute('''
+            SELECT document_id, source_file, file_hash 
+            FROM documents 
+            WHERE source_file IS NOT NULL AND source_file != ''
+        ''')
+        
+        db_documents = {}
+        for doc_id, source_file, file_hash in cursor.fetchall():
+            db_documents[source_file] = {
+                "document_id": doc_id,
+                "file_hash": file_hash
+            }
+        conn.close()
+        
+        # Scan directory for current files
+        discovery = DocumentDiscovery()
+        current_files = discovery.scan_directory_for_documents(
+            directory=source_directory,
+            recursive=True
+        )
+        
+        updates_needed = {
+            "new_files": [],
+            "modified_files": [],
+            "deleted_files": []
+        }
+        
+        # Check for new and modified files
+        for doc_metadata in current_files:
+            file_path = str(doc_metadata.file_path)
+            
+            # Calculate current file hash
+            try:
+                with open(file_path, 'rb') as f:
+                    current_hash = hashlib.md5(f.read()).hexdigest()
+            except Exception:
+                continue
+            
+            if file_path in db_documents:
+                # Check if modified
+                if db_documents[file_path]["file_hash"] != current_hash:
+                    updates_needed["modified_files"].append({
+                        "file_path": file_path,
+                        "document_id": db_documents[file_path]["document_id"],
+                        "old_hash": db_documents[file_path]["file_hash"][:8],
+                        "new_hash": current_hash[:8]
+                    })
+                db_documents.pop(file_path)  # Remove from tracking
+            else:
+                # New file
+                updates_needed["new_files"].append({
+                    "file_path": file_path,
+                    "file_type": doc_metadata.file_type,
+                    "file_size_mb": doc_metadata.file_size / (1024 * 1024)
+                })
+        
+        # Remaining files in db_documents are deleted
+        for source_file, doc_info in db_documents.items():
+            updates_needed["deleted_files"].append({
+                "file_path": source_file,
+                "document_id": doc_info["document_id"]
+            })
+        
+        return updates_needed
+    
     def export_database(self, export_path: str, format: str = "json") -> str:
         """Export database content in various formats"""
         export_path = Path(export_path)
