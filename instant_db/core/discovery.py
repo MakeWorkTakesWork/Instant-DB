@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import List, Dict, Set, Optional, Union
 from dataclasses import dataclass, field
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import multiprocessing
 import magic
 
 # Initialize libmagic for better file type detection
@@ -201,6 +203,173 @@ class DocumentDiscovery:
                 continue
         
         return discovered_docs
+    
+    def scan_directory_for_documents_parallel(
+        self,
+        directory: Union[str, Path],
+        recursive: bool = True,
+        file_extensions: Optional[List[str]] = None,
+        exclude_patterns: Optional[List[str]] = None,
+        max_file_size_mb: int = 100
+    ) -> List[DocumentMetadata]:
+        """
+        Parallel directory scanning for improved performance
+        
+        Args:
+            directory: Directory path to scan
+            recursive: Whether to scan subdirectories
+            file_extensions: Specific extensions to include (None = all supported)
+            exclude_patterns: Patterns to exclude from scanning
+            max_file_size_mb: Maximum file size in MB
+            
+        Returns:
+            List of DocumentMetadata objects for discovered documents
+        """
+        directory = Path(directory)
+        if not directory.exists():
+            raise FileNotFoundError(f"Directory not found: {directory}")
+        
+        if not directory.is_dir():
+            raise ValueError(f"Path is not a directory: {directory}")
+        
+        # Determine optimal worker count
+        cpu_count = min(multiprocessing.cpu_count(), 8)  # Cap at 8 workers
+        
+        # Get top-level directories for parallel processing
+        subdirs = []
+        files_in_root = []
+        
+        for item in directory.iterdir():
+            if item.is_dir() and not item.name.startswith('.'):
+                subdirs.append(item)
+            elif item.is_file() and self._is_supported_file(item, file_extensions):
+                files_in_root.append(item)
+        
+        # Process subdirectories in parallel
+        all_docs = []
+        
+        # Process root files first
+        for file_path in files_in_root:
+            try:
+                metadata = self._create_document_metadata(file_path)
+                if metadata and self._passes_filters(metadata, exclude_patterns, max_file_size_mb):
+                    all_docs.append(metadata)
+            except Exception:
+                continue
+        
+        # Process subdirectories in parallel
+        if subdirs and recursive:
+            with ThreadPoolExecutor(max_workers=cpu_count) as executor:
+                # Submit subdirectory scans
+                future_to_dir = {
+                    executor.submit(
+                        self._scan_directory_recursive, 
+                        subdir, 
+                        file_extensions, 
+                        exclude_patterns, 
+                        max_file_size_mb
+                    ): subdir
+                    for subdir in subdirs
+                }
+                
+                # Collect results as they complete
+                for future in as_completed(future_to_dir):
+                    subdir = future_to_dir[future]
+                    try:
+                        docs = future.result()
+                        all_docs.extend(docs)
+                    except Exception as e:
+                        import logging
+                        logging.error(f"Error scanning {subdir}: {e}")
+        
+        # Sort by modification time (newest first)
+        all_docs.sort(key=lambda d: d.modification_date, reverse=True)
+        
+        return all_docs
+    
+    def _scan_directory_recursive(
+        self, 
+        directory: Path, 
+        file_extensions: Optional[List[str]], 
+        exclude_patterns: Optional[List[str]], 
+        max_file_size_mb: int
+    ) -> List[DocumentMetadata]:
+        """Recursively scan directory for supported files"""
+        docs = []
+        
+        try:
+            for item in directory.rglob('*'):
+                if item.is_file() and not any(part.startswith('.') for part in item.parts):
+                    if self._is_supported_file(item, file_extensions):
+                        try:
+                            metadata = self._create_document_metadata(item)
+                            if metadata and self._passes_filters(metadata, exclude_patterns, max_file_size_mb):
+                                docs.append(metadata)
+                        except Exception:
+                            continue
+        except PermissionError:
+            import logging
+            logging.warning(f"Permission denied: {directory}")
+        except Exception as e:
+            import logging
+            logging.error(f"Error scanning directory {directory}: {e}")
+        
+        return docs
+    
+    def _is_supported_file(self, file_path: Path, file_extensions: Optional[List[str]]) -> bool:
+        """Check if file is supported based on extension"""
+        target_extensions = set(file_extensions or self.SUPPORTED_EXTENSIONS.keys())
+        return file_path.suffix.lower() in target_extensions
+    
+    def _passes_filters(self, metadata: DocumentMetadata, exclude_patterns: Optional[List[str]], max_file_size_mb: int) -> bool:
+        """Check if document passes all filters"""
+        # Check exclusion patterns
+        if exclude_patterns and self._should_exclude(metadata.file_path, exclude_patterns):
+            return False
+        
+        # Check file size
+        max_size_bytes = max_file_size_mb * 1024 * 1024
+        if metadata.file_size > max_size_bytes or metadata.file_size == 0:
+            return False
+        
+        return True
+    
+    def discover_documents(
+        self,
+        directory: Union[str, Path],
+        recursive: bool = True,
+        file_extensions: Optional[List[str]] = None,
+        exclude_patterns: Optional[List[str]] = None,
+        max_file_size_mb: int = 100
+    ) -> List[DocumentMetadata]:
+        """
+        Discover documents with parallel scanning for large directories
+        
+        Automatically chooses between sequential and parallel scanning based on directory size
+        """
+        directory = Path(directory)
+        
+        # Count items to decide strategy
+        try:
+            item_count = sum(1 for _ in directory.iterdir())
+            
+            # Use parallel scanning for directories with many items
+            if item_count > 100:
+                return self.scan_directory_for_documents_parallel(
+                    directory, recursive, file_extensions, exclude_patterns, max_file_size_mb
+                )
+            else:
+                # Use existing sequential method for small directories
+                return self.scan_directory_for_documents(
+                    directory, recursive, file_extensions, exclude_patterns, max_file_size_mb
+                )
+        except Exception as e:
+            import logging
+            logging.error(f"Discovery failed: {e}")
+            # Fallback to sequential
+            return self.scan_directory_for_documents(
+                directory, recursive, file_extensions, exclude_patterns, max_file_size_mb
+            )
     
     def _should_exclude(self, file_path: Path, exclude_patterns: List[str]) -> bool:
         """Check if file should be excluded based on patterns"""

@@ -88,26 +88,103 @@ class OpenAIProvider(BaseEmbeddingProvider):
             "text-embedding-3-large": 3072,
             "text-embedding-ada-002": 1536,
         }
+        
+        # Initialize cache
+        self.cache = {}
+        self._cache_file = Path("openai_embeddings_cache.pkl")
+        self._load_cache()
+    
+    def _get_cache_key(self, text: str) -> str:
+        """Generate cache key for text"""
+        return hashlib.md5(f"{self.model_name}:{text}".encode()).hexdigest()
+    
+    def _load_cache(self):
+        """Load embeddings cache from disk"""
+        if self._cache_file.exists():
+            try:
+                import pickle
+                with open(self._cache_file, 'rb') as f:
+                    self.cache = pickle.load(f)
+            except Exception:
+                self.cache = {}
+    
+    def _save_cache(self):
+        """Save embeddings cache to disk"""
+        try:
+            import pickle
+            with open(self._cache_file, 'wb') as f:
+                pickle.dump(self.cache, f)
+        except Exception:
+            pass
     
     def encode(self, texts: List[str]) -> np.ndarray:
-        """Encode texts using OpenAI API"""
+        """Batch encoding with 100-text chunks"""
         if not texts:
             return np.array([])
         
+        all_embeddings = []
+        batch_size = 100  # OpenAI API limit
+        
+        # Check cache first
+        uncached_texts = []
+        cached_embeddings = {}
+        for text in texts:
+            cache_key = self._get_cache_key(text)
+            if cache_key in self.cache:
+                cached_embeddings[text] = self.cache[cache_key]
+            else:
+                uncached_texts.append(text)
+        
+        # Batch process uncached texts
+        uncached_embeddings = []
+        for i in range(0, len(uncached_texts), batch_size):
+            batch = uncached_texts[i:i + batch_size]
+            try:
+                response = self.client.embeddings.create(
+                    input=batch,
+                    model=self.model_name
+                )
+                batch_embeddings = [item.embedding for item in response.data]
+                
+                # Cache results
+                for text, embedding in zip(batch, batch_embeddings):
+                    cache_key = self._get_cache_key(text)
+                    self.cache[cache_key] = embedding
+                
+                uncached_embeddings.extend(batch_embeddings)
+            except Exception as e:
+                import logging
+                logging.error(f"Batch embedding failed: {e}")
+                # Fallback to single encoding
+                for text in batch:
+                    embedding = self._encode_single(text)
+                    uncached_embeddings.append(embedding)
+        
+        # Combine cached and new embeddings in original order
+        final_embeddings = []
+        uncached_idx = 0
+        for text in texts:
+            if text in cached_embeddings:
+                final_embeddings.append(cached_embeddings[text])
+            else:
+                final_embeddings.append(uncached_embeddings[uncached_idx])
+                uncached_idx += 1
+        
+        self._save_cache()
+        return np.array(final_embeddings)
+    
+    def _encode_single(self, text: str) -> List[float]:
+        """Fallback single text encoding"""
         try:
             response = self.client.embeddings.create(
-                input=texts,
+                input=[text],
                 model=self.model_name
             )
-            
-            embeddings = []
-            for item in response.data:
-                embeddings.append(item.embedding)
-            
-            return np.array(embeddings)
-            
+            return response.data[0].embedding
         except Exception as e:
-            raise RuntimeError(f"OpenAI API error: {e}")
+            import logging
+            logging.error(f"Single encoding failed: {e}")
+            return [0.0] * self.get_dimension()
     
     def get_dimension(self) -> int:
         """Get embedding dimension"""

@@ -10,6 +10,7 @@ import hashlib
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from datetime import datetime
+from contextlib import contextmanager
 
 import numpy as np
 
@@ -104,6 +105,66 @@ class InstantDB:
         
         conn.commit()
         conn.close()
+    
+    def transaction(self):
+        """Context manager for atomic operations"""
+        return self._transaction_context()
+
+    @contextmanager
+    def _transaction_context(self):
+        """Transaction context manager for atomic operations"""
+        conn = sqlite3.connect(self.metadata_db_path)
+        cursor = conn.cursor()
+        try:
+            cursor.execute("BEGIN")
+            yield conn
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            import logging
+            logging.error(f"Transaction failed: {e}")
+            raise e
+        finally:
+            cursor.close()
+            conn.close()
+    
+    def add_documents_batch(self, documents: List[Dict]) -> Dict[str, Any]:
+        """Batch add with transaction support"""
+        with self.transaction() as conn:
+            results = []
+            errors = []
+            for i, doc in enumerate(documents):
+                try:
+                    result = self.add_document(
+                        content=doc['content'],
+                        metadata=doc.get('metadata', {}),
+                        document_id=doc.get('document_id')
+                    )
+                    results.append(result)
+                except Exception as e:
+                    errors.append({"index": i, "error": str(e)})
+                    raise  # Rollback entire batch on error
+            return {
+                "processed": len(results),
+                "successful": len(results),
+                "failed": len(errors),
+                "results": results,
+                "errors": errors
+            }
+    
+    def _compare_chunks(self, old_chunks: List[Dict], new_chunks: List[Dict]) -> Dict[str, List[Dict]]:
+        """Compare old and new chunks to find differences"""
+        old_by_content = {chunk['content']: chunk for chunk in old_chunks}
+        new_by_content = {chunk['content']: chunk for chunk in new_chunks}
+        
+        old_contents = set(old_by_content.keys())
+        new_contents = set(new_by_content.keys())
+        
+        return {
+            'added': [new_by_content[c] for c in (new_contents - old_contents)],
+            'removed': [old_by_content[c] for c in (old_contents - new_contents)],
+            'unchanged': [old_by_content[c] for c in (old_contents & new_contents)]
+        }
     
     def add_document(self, 
                     content: str,
@@ -435,7 +496,7 @@ class InstantDB:
     
     def update_document(self, document_id: str, content: str, metadata: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Update an existing document by re-processing it
+        Optimized update using chunk diffing with transaction support
         
         Args:
             document_id: ID of the document to update
@@ -445,54 +506,126 @@ class InstantDB:
         Returns:
             Dict with update results
         """
-        # Calculate new file hash
-        new_file_hash = hashlib.md5(content.encode()).hexdigest()
-        
-        # Check if document exists and get old hash
-        conn = sqlite3.connect(self.metadata_db_path)
-        cursor = conn.execute(
-            'SELECT file_hash FROM documents WHERE document_id = ?',
-            (document_id,)
-        )
-        result = cursor.fetchone()
-        conn.close()
-        
-        if not result:
-            return {"status": "error", "document_id": document_id, "error": "Document not found"}
-        
-        old_file_hash = result[0]
-        
-        # Check if content has changed
-        if old_file_hash == new_file_hash:
-            return {"status": "skipped", "document_id": document_id, "reason": "Content unchanged"}
-        
-        try:
-            # Delete old document
-            self.delete_document(document_id)
+        with self.transaction():
+            # Calculate new file hash
+            new_file_hash = hashlib.md5(content.encode()).hexdigest()
             
-            # Add updated document
-            add_result = self.add_document(content, metadata, document_id)
+            # Check if document exists and get old hash
+            conn = sqlite3.connect(self.metadata_db_path)
+            cursor = conn.execute(
+                'SELECT file_hash FROM documents WHERE document_id = ?',
+                (document_id,)
+            )
+            result = cursor.fetchone()
             
-            if add_result["status"] == "success":
-                self._log_operation(document_id, "update_document", "success", 
-                                  f"Updated with {add_result.get('chunks_processed', 0)} chunks")
-                return {
-                    "status": "updated",
-                    "document_id": document_id,
-                    "chunks_processed": add_result.get("chunks_processed", 0),
-                    "old_hash": old_file_hash[:8],
-                    "new_hash": new_file_hash[:8]
-                }
-            else:
-                return add_result
+            if not result:
+                conn.close()
+                return {"status": "error", "document_id": document_id, "error": "Document not found"}
+            
+            old_file_hash = result[0]
+            
+            # Check if content has changed
+            if old_file_hash == new_file_hash:
+                conn.close()
+                return {"status": "skipped", "document_id": document_id, "reason": "Content unchanged"}
+            
+            # Get existing chunks
+            cursor = conn.execute(
+                "SELECT chunk_id, content FROM chunks WHERE document_id = ?",
+                (document_id,)
+            )
+            old_chunks = [
+                {'id': row[0], 'content': row[1]}
+                for row in cursor.fetchall()
+            ]
+            conn.close()
+            
+            try:
+                # Generate new chunks
+                new_chunks = self.chunking_engine.chunk_text(
+                    content,
+                    metadata={**metadata, 'document_id': document_id}
+                )
                 
-        except Exception as e:
-            self._log_operation(document_id, "update_document", "error", str(e))
-            return {
-                "status": "error",
-                "document_id": document_id,
-                "error": str(e)
-            }
+                # Compare chunks
+                diff = self._compare_chunks(old_chunks, new_chunks)
+                
+                # Remove deleted chunks
+                for chunk in diff['removed']:
+                    self.search_engine.delete_document(chunk['id'])
+                    conn = sqlite3.connect(self.metadata_db_path)
+                    conn.execute(
+                        "DELETE FROM chunks WHERE chunk_id = ?",
+                        (chunk['id'],)
+                    )
+                    conn.commit()
+                    conn.close()
+                
+                # Add new chunks
+                if diff['added']:
+                    texts = [chunk['content'] for chunk in diff['added']]
+                    embeddings = self.embedding_provider.encode(texts)
+                    
+                    # Add to vector store
+                    documents = [
+                        {
+                            'id': f"{document_id}_chunk_{i}_{hash(chunk['content'])}",
+                            'content': chunk['content'],
+                            'metadata': chunk['metadata']
+                        }
+                        for i, chunk in enumerate(diff['added'])
+                    ]
+                    
+                    # Ensure document IDs are not too long
+                    for doc in documents:
+                        if len(doc['id']) > 64:
+                            doc['id'] = doc['id'][:64]
+                    
+                    self.search_engine.add_documents(documents, embeddings)
+                    
+                    # Update metadata
+                    conn = sqlite3.connect(self.metadata_db_path)
+                    for doc, chunk in zip(documents, diff['added']):
+                        conn.execute(
+                            "INSERT INTO chunks (chunk_id, document_id, content) VALUES (?, ?, ?)",
+                            (doc['id'], document_id, chunk['content'])
+                        )
+                    conn.commit()
+                    conn.close()
+                
+                # Update document metadata
+                conn = sqlite3.connect(self.metadata_db_path)
+                conn.execute(
+                    "UPDATE documents SET metadata = ?, file_hash = ? WHERE document_id = ?",
+                    (json.dumps(metadata), new_file_hash, document_id)
+                )
+                conn.commit()
+                conn.close()
+                
+                import logging
+                logging.info(f"Updated document {document_id}: "
+                           f"+{len(diff['added'])} -{len(diff['removed'])} chunks")
+                
+                self._log_operation(document_id, "update_document", "success", 
+                                  f"Optimized update: +{len(diff['added'])} -{len(diff['removed'])} chunks")
+                
+                return {
+                    'status': 'updated',
+                    'document_id': document_id,
+                    'chunks_added': len(diff['added']),
+                    'chunks_removed': len(diff['removed']),
+                    'chunks_unchanged': len(diff['unchanged']),
+                    'old_hash': old_file_hash[:8],
+                    'new_hash': new_file_hash[:8]
+                }
+                
+            except Exception as e:
+                self._log_operation(document_id, "update_document", "error", str(e))
+                return {
+                    "status": "error",
+                    "document_id": document_id,
+                    "error": str(e)
+                }
     
     def check_for_updates(self, source_directory: Path) -> Dict[str, Any]:
         """
@@ -637,7 +770,7 @@ class InstantDB:
         result = cursor.fetchone()
         conn.close()
         
-        return result is not None and result[0] == file_hash
+        return result is not None and file_hash is not None and result[0] == file_hash
     
     def _update_document_metadata(self, document_id: str, title: str, document_type: str,
                                  source_file: str, chunk_count: int, total_chars: int,

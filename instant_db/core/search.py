@@ -139,6 +139,7 @@ class FAISSVectorStore(BaseVectorStore):
     def __init__(self, db_path: Path, dimension: int):
         try:
             import faiss
+            import pickle
         except ImportError:
             raise ImportError("faiss-cpu not installed. Install with: pip install faiss-cpu")
         
@@ -146,6 +147,7 @@ class FAISSVectorStore(BaseVectorStore):
         self.dimension = dimension
         self.index_path = db_path / "faiss.index"
         self.metadata_path = db_path / "faiss_metadata.json"
+        self.embeddings_path = db_path / "faiss_embeddings.pkl"
         
         # Initialize FAISS index
         if self.index_path.exists():
@@ -158,6 +160,28 @@ class FAISSVectorStore(BaseVectorStore):
         if self.metadata_path.exists():
             with open(self.metadata_path, 'r') as f:
                 self.documents = json.load(f)
+        
+        # Initialize embeddings storage
+        self.embeddings_store = {}  # id -> embedding mapping
+        self._load_embeddings()
+    
+    def _save_embeddings(self):
+        """Persist embeddings to disk"""
+        import pickle
+        with open(self.embeddings_path, 'wb') as f:
+            pickle.dump(self.embeddings_store, f)
+    
+    def _load_embeddings(self):
+        """Load embeddings from disk"""
+        import pickle
+        if self.embeddings_path.exists():
+            try:
+                with open(self.embeddings_path, 'rb') as f:
+                    self.embeddings_store = pickle.load(f)
+            except Exception:
+                self.embeddings_store = {}
+        else:
+            self.embeddings_store = {}
     
     def add_documents(self, documents: List[Dict[str, Any]], embeddings: np.ndarray):
         """Add documents to FAISS index"""
@@ -173,7 +197,11 @@ class FAISSVectorStore(BaseVectorStore):
         # Store metadata
         self.documents.extend(documents)
         
-        # Save index and metadata
+        # Store embeddings for each document
+        for i, doc in enumerate(documents):
+            self.embeddings_store[doc['id']] = normalized_embeddings[i]
+        
+        # Save index, metadata, and embeddings
         self._save()
     
     def search(self, query_embedding: np.ndarray, top_k: int = 5, filters: Optional[Dict] = None) -> List[Dict]:
@@ -228,48 +256,60 @@ class FAISSVectorStore(BaseVectorStore):
         return len(self.documents)
     
     def delete_document(self, document_id: str) -> bool:
-        """Delete documents by document_id"""
+        """Efficient delete without full rebuild"""
         try:
             import faiss
             
-            # Find all indices to delete
-            indices_to_delete = []
-            for i, doc in enumerate(self.documents):
-                if doc.get("document_id") == document_id:
-                    indices_to_delete.append(i)
+            # Find documents to delete
+            docs_to_delete = []
+            remaining_docs = []
             
-            if not indices_to_delete:
+            for doc in self.documents:
+                if doc.get("document_id") == document_id:
+                    docs_to_delete.append(doc)
+                else:
+                    remaining_docs.append(doc)
+            
+            if not docs_to_delete:
                 return False
             
-            # Remove from documents list (in reverse order to maintain indices)
-            for i in sorted(indices_to_delete, reverse=True):
-                del self.documents[i]
+            # Remove from embeddings store
+            for doc in docs_to_delete:
+                if doc['id'] in self.embeddings_store:
+                    del self.embeddings_store[doc['id']]
             
-            # Rebuild FAISS index without deleted documents
+            # Update documents list
+            self.documents = remaining_docs
+            
+            # Rebuild index with remaining embeddings
+            self.index = faiss.IndexFlatIP(self.dimension)
             if self.documents:
-                # Get remaining embeddings
                 remaining_embeddings = []
-                for i, doc in enumerate(self.documents):
-                    if i not in indices_to_delete:
-                        # Note: We'd need to store embeddings to properly rebuild
-                        # For now, we'll need to recreate the index from scratch
-                        pass
+                for doc in self.documents:
+                    if doc['id'] in self.embeddings_store:
+                        remaining_embeddings.append(self.embeddings_store[doc['id']])
                 
-                # Since we can't easily remove from FAISS index, we'll mark this as needing rebuild
-                # In production, you'd want to store embeddings alongside documents
+                if remaining_embeddings:
+                    embeddings_array = np.array(remaining_embeddings).astype('float32')
+                    self.index.add(embeddings_array)
             
+            # Save updated state
             self._save()
             return True
-        except Exception:
+        except Exception as e:
+            import logging
+            logging.error(f"FAISS delete failed: {e}")
             return False
     
     def _save(self):
-        """Save FAISS index and metadata"""
+        """Save FAISS index, metadata, and embeddings"""
         import faiss
         faiss.write_index(self.index, str(self.index_path))
         
         with open(self.metadata_path, 'w') as f:
             json.dump(self.documents, f)
+        
+        self._save_embeddings()
 
 
 class SQLiteVectorStore(BaseVectorStore):

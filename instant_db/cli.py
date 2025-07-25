@@ -82,7 +82,7 @@ def cli(ctx, verbose, quiet, config_path, db_path, embedding_provider, vector_db
 @click.argument('input_path', type=click.Path(exists=True))
 @click.option('-o', '--output', help='Output directory for database')
 @click.option('--auto-detect/--manifest-path', default=True, 
-              help='Auto-detect documents in directory vs use specific manifest file')
+              help='Auto-detect documents in directory vs use specific manifest file. Manifest format: {"files": [{"path": "file.txt", "metadata": {...}}]}')
 @click.option('--extensions', multiple=True, 
               help='File extensions to process (e.g., --extensions .pdf --extensions .txt)')
 @click.option('--recursive/--no-recursive', default=True, 
