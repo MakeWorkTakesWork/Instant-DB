@@ -63,3 +63,7 @@ venv.bak/
 instant_db_database/
 *.db
 *.index
+
+# Development and context files
+context-saves/
+*.log
