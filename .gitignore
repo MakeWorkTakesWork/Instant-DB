@@ -41,6 +41,14 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 
+# Test results and benchmarks
+test_results.json
+benchmark_results.json
+*_results.json
+*_report.json
+performance_comparison_results.json
+release_validation_report.json
+
 # Environments
 .env
 .venv
@@ -55,15 +63,73 @@ venv.bak/
 .idea/
 *.swp
 *.swo
+*~
 
 # macOS
 .DS_Store
+**/.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
 
 # Instant-DB specific
 instant_db_database/
 *.db
 *.index
+*.pkl
+*.pickle
+
+# Generated documentation and reports
+enhanced_documentation.md
+production_hardening_summary.md
+repository_analysis.md
+
+# Generated test and optimization scripts
+comprehensive_test_suite.py
+database_optimizations.py
+error_recovery.py
+health_monitoring.py
+memory_optimizations.py
+performance_comparison.py
+performance_monitoring.py
+performance_profiler.py
+production_logging.py
+release_validation.py
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+
+# Cache directories
+.cache/
+cache/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# Local configuration
+config.local.json
+settings.local.json
 
 # Development and context files
-context-saves/
-*.log
+# context-saves/ # We want to keep context-saves in the repo
